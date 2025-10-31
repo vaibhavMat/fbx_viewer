@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FBX Viewer — Localhost Path Fix</title>
+  <style>
+    body { margin:0; background:#0b0f14; overflow:hidden; font-family:sans-serif; color:#eaf2ff; }
+    #msg { position:absolute; top:10px; left:10px; background:#121821cc; padding:10px 14px; border-radius:10px; border:1px solid #1f2a37; max-width:420px; font-size:13px; line-height:1.4; }
+    #loadingBarWrap { position:absolute; top:16px; right:16px; width:260px; background:#1a2430; border:1px solid #223043; border-radius:12px; overflow:hidden; }
+    #loadingBar { height:10px; background:linear-gradient(90deg, #3b82f6, #22d3ee); width:0%; transition: width .15s ease; }
+    #loadingText { padding:8px 10px; font-size:12px; color:#9fb0c6; }
+  </style>
+</head>
+<body>
+  <div id="msg">
+    <strong>Instructions:</strong><br>
+    1️⃣ Run this folder with <b>VS Code → Run with Live Server</b> or <b>python -m http.server 8080</b>.<br>
+    2️⃣ Visit <b>http://127.0.0.1:5500</b> (Live Server) or <b>http://localhost:8080</b> (Python).<br>
+    3️⃣ Make sure your folder looks like:<br>
+    <pre>fbx_viewer_app/
+ ├─ index.html
+ └─ sample/
+    └─ sample.fbx</pre>
+    4️⃣ If your server uses a different port, update the path below.
+  </div>
+
+  <div id="loadingBarWrap">
+    <div id="loadingText">Loading environment… 0%</div>
+    <div id="loadingBar"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+    import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/FBXLoader.js";
+    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0f14);
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.1, 2000);
+    camera.position.set(0, 1.7, 5);
+
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight(0xddeeff, 0x0b0f14, 0.6);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(5,10,7);
+    scene.add(hemi, dir);
+
+    const grid = new THREE.GridHelper(100,100,0x335577,0x335577);
+    grid.material.transparent = true;
+    grid.material.opacity = 0.2;
+    scene.add(grid);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    const loadingBar = document.getElementById('loadingBar');
+    const loadingText = document.getElementById('loadingText');
+    const manager = new THREE.LoadingManager();
+
+    manager.onProgress = (url, loaded, total) => {
+      const pct = Math.round((loaded/total)*100);
+      loadingBar.style.width = pct + '%';
+      loadingText.textContent = `Loading environment… ${pct}%`;
+    };
+    manager.onLoad = () => {
+      loadingText.textContent = 'Loaded';
+      setTimeout(()=>document.getElementById('loadingBarWrap').style.display='none',500);
+    };
+
+    const loader = new FBXLoader(manager);
+
+    // ✅ Try both common localhost paths automatically
+    const candidates = [
+      './sample/sample.fbx',
+      window.location.origin + '/sample/sample.fbx',
+      'http://127.0.0.1:5500/sample/sample.fbx',
+      'http://localhost:8080/sample/sample.fbx'
+    ];
+
+    async function tryLoad() {
+      for (const url of candidates) {
+        try {
+          const res = await fetch(url, {method:'HEAD'});
+          if (res.ok) {
+            console.log('Using', url);
+            loader.load(url, (fbx)=>{
+              fbx.traverse(o=>{if(o.isMesh)o.material.side=THREE.FrontSide;});
+              scene.add(fbx);
+              console.log('Loaded FBX from', url);
+            });
+            return;
+          }
+        } catch(e) { console.warn('Failed', url, e); }
+      }
+      loadingText.textContent = 'FBX not found — check console';
+    }
+
+    tryLoad();
+
+    function animate(){
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene,camera);
+    }
+    animate();
+
+    window.addEventListener('resize',()=>{
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
